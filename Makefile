@@ -11,7 +11,7 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 all: rept
 
 check: rept
-	./rept -v	> /dev/null
+	./rept -v > /dev/null
 
 install: rept
 	install rept $(bindir)/rept
