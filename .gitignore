@@ -1,2 +1,7 @@
 *.swp
 rept
+rept.exe
+vs/bin
+vs/obj
+vs/*.VC.db
+vs/*.user
