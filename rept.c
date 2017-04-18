@@ -8,6 +8,8 @@
 #else
 # include <unistd.h>
 # include <errno.h>
+# include <sys/types.h>
+# include <sys/wait.h>
 #endif
 
 #ifndef PACKAGE
@@ -175,15 +177,15 @@ static int run_child(TCHAR *cmdline)
 /* Returns: 0 success
            -1 broken pipe
    Exits on error. */
-static int run_child(int argc, char **argv)
+static int run_child(char **argv)
 {
 	int fds[2];
 	if (pipe(fds) == -1) goto err;
 
 	pid_t pid = fork();
-	if (pid == -1) goto err;
-
-	if (pid == 0) {
+	if (pid == -1) {
+		goto err;
+	} else if (pid == 0) {
 		/* In the child process. Assign the write end of the
 		   pipe we created to standard output */
 		while (dup2(fds[1], STDOUT_FILENO) == -1) {
@@ -194,7 +196,7 @@ static int run_child(int argc, char **argv)
 		close(fds[0]);
 		close(fds[1]);
 
-		execvp(argv[1], &argv[1]);
+		execvp(argv[0], argv);
 
 		/* execvp has failed if we get here */
 		goto err;
@@ -204,36 +206,53 @@ static int run_child(int argc, char **argv)
 	   of the pipe. */
 	close(fds[1]);
 
+	bool have_eof = false;
+	bool have_epipe = false;
+	bool have_err = false;
+
 	char buf[4096];
-	while (1) {
+	while (!have_eof && !have_epipe && !have_err) {
 		ssize_t len;
-		do { len = read(fds[0], buf, sizeof(buf));
+		do {
+			len = read(fds[0], buf, sizeof(buf));
 		} while (len == -1 && errno == EINTR);
 
-		if (len == -1) goto err;
-		if (len == 0) {
+		if (len == -1) {
+			have_err = true;
+		} else if (len == 0) {
 			/* EOF, child has terminated */
-			close(fds[0]);
-			break;
+			have_eof = true;
+		} else {
+			char *rest = buf;
+			do {
+				size_t n = write(STDOUT_FILENO, rest, len);
+				if (n >= 0) {
+					len -= n;
+					rest += n;
+				} else if (errno == EINTR) {
+					/* try again */
+				} else if (errno == EPIPE) {
+					have_epipe = true;
+					break;
+				} else {
+					have_err = true;
+					break;
+				}
+			} while (len > 0);
 		}
-
-		char *rest = buf;
-		do {
-			size_t n = write(STDOUT_FILENO, rest, len);
-			if (n == -1) {
-				if (errno == EINTR) continue;
-				if (errno == EPIPE) return -1;
-				goto err;
-			}
-			len -= n;
-			rest += n;
-		} while (len > 0);
 	}
 
-	return 0;
+	close(fds[0]);
+	if (pid > 0) wait(NULL);
 
-err:	perror(PACKAGE);
-	exit(EXIT_FAILURE);
+	if (have_epipe) {
+		return 1;
+	} else if (have_err) {
+err:		perror(PACKAGE);
+		exit(EXIT_FAILURE);
+	} else {
+		return 0;
+	}
 }
 #endif /* _WIN32 */
 
@@ -274,7 +293,7 @@ int main(int argc, char **argv)
 #ifdef _WIN32
 		done = run_child(cmdline);
 #else
-		done = run_child(argc+1, argv-1);
+		done = run_child(argv+1);
 #endif
 	}
 
