@@ -206,22 +206,21 @@ static int run_child(char **argv)
 	   of the pipe. */
 	close(fds[1]);
 
-	bool have_eof = false;
-	bool have_epipe = false;
-	bool have_err = false;
+	bool eof = false;
+	int err = 0;
 
 	char buf[4096];
-	while (!have_eof && !have_epipe && !have_err) {
+	while (!eof && !err) {
 		ssize_t len;
 		do {
 			len = read(fds[0], buf, sizeof(buf));
 		} while (len == -1 && errno == EINTR);
 
 		if (len == -1) {
-			have_err = true;
+			err = errno;
 		} else if (len == 0) {
 			/* EOF, child has terminated */
-			have_eof = true;
+			eof = true;
 		} else {
 			char *rest = buf;
 			do {
@@ -231,11 +230,8 @@ static int run_child(char **argv)
 					rest += n;
 				} else if (errno == EINTR) {
 					/* try again */
-				} else if (errno == EPIPE) {
-					have_epipe = true;
-					break;
 				} else {
-					have_err = true;
+					err = errno;
 					break;
 				}
 			} while (len > 0);
@@ -245,14 +241,17 @@ static int run_child(char **argv)
 	close(fds[0]);
 	if (pid > 0) wait(NULL);
 
-	if (have_epipe) {
-		return 1;
-	} else if (have_err) {
-err:		perror(PACKAGE);
-		exit(EXIT_FAILURE);
-	} else {
+	if (!err) {
 		return 0;
+	} else if (err == EPIPE) {
+		return 1;
+	} else {
+		printf(PACKAGE ": %s\n", strerror(err));
+		exit(EXIT_FAILURE);
 	}
+
+err:	perror(PACKAGE);
+	exit(EXIT_FAILURE);
 }
 #endif /* _WIN32 */
 
