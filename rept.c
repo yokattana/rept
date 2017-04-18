@@ -225,7 +225,7 @@ static int run_child(char **argv)
 		} else {
 			char *rest = buf;
 			do {
-				size_t n = write(STDOUT_FILENO, rest, len);
+				ssize_t n = write(STDOUT_FILENO, rest, len);
 				if (n >= 0) {
 					len -= n;
 					rest += n;
