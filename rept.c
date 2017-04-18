@@ -174,6 +174,31 @@ static int run_child(TCHAR *cmdline)
 
 #else /* _WIN32 */
 
+static ssize_t read_retrying(int file, char *buf, size_t num)
+{
+	ssize_t ret;
+	do {
+		ret = read(file, buf, num);
+	} while (ret == -1 && errno == EINTR);
+	return ret;
+}
+
+static ssize_t write_all(int file, const char *buf, size_t num)
+{
+	ssize_t nwritten = 0;
+
+	while (nwritten < num) {
+		ssize_t ret = write(file, buf + nwritten, num - nwritten);
+		if (ret >= 0) {
+			nwritten += ret;
+		} else if (errno != EINTR) {
+			break;
+		}
+	}
+
+	return nwritten;
+}
+
 /* Returns: 0 success
            -1 broken pipe
    Exits on error. */
@@ -211,30 +236,15 @@ static int run_child(char **argv)
 
 	char buf[4096];
 	while (!eof && !err) {
-		ssize_t len;
-		do {
-			len = read(fds[0], buf, sizeof(buf));
-		} while (len == -1 && errno == EINTR);
-
+		ssize_t len = read_retrying(fds[0], buf, sizeof(buf));
 		if (len == -1) {
 			err = errno;
 		} else if (len == 0) {
 			/* EOF, child has terminated */
 			eof = true;
 		} else {
-			char *rest = buf;
-			do {
-				ssize_t n = write(STDOUT_FILENO, rest, len);
-				if (n >= 0) {
-					len -= n;
-					rest += n;
-				} else if (errno == EINTR) {
-					/* try again */
-				} else {
-					err = errno;
-					break;
-				}
-			} while (len > 0);
+			ssize_t nwritten = write_all(STDOUT_FILENO, buf, len);
+			if (nwritten != len) err = errno;
 		}
 	}
 
