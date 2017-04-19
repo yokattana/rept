@@ -1,0 +1,63 @@
+.Dd $Mdocdate$
+.Dt REPT
+.Os Yokattana
+.Sh NAME
+.Nm rept
+.Nd repeat a command
+.Sh SYNOPSIS
+.Nm
+.Ar program
+.Op Ar argument ...
+.Nm
+.Op options
+.Sh DESCRIPTION
+The
+.Nm
+utility calls the given command,
+waits for it to finish, then calls it again and so on
+until it is killed or standard output becomes unavailable.
+The return value of the command is ignored.
+.Pp
+The Windows version of
+.Nm
+does no argument escaping of any kind;
+the command line following 
+.Nm
+is passed to the system verbatim.
+This means that the command is not executed within a
+.Em cmd.exe
+context. 
+To use
+.Em cmd
+built-ins, invoke
+.Em cmd
+as part of the command line as in the example below.
+.Pp
+Options:
+.Bl -tag -width Ds
+.It Fl h
+Print a short help message and exit.
+.It Fl v
+Print version and exit.
+.El
+.Sh EXAMPLES
+The equivalent to the
+.Em yes
+command is:
+.Pp
+.Dl rept echo yes
+.Pp
+On Windows, we need to go though
+.Em cmd
+because
+.Em echo
+is a built-in:
+.Pp
+.Dl rept cmd /c echo yes
+.Pp
+.Sh EXIT STATUS
+When standard output becomes unavailable the program terminates
+with exit status 0.
+Should an error or abnormal termination occur, the exit status is nonzero.
+.Sh AUTHORS
+.An Mt iku@yokattana.com
