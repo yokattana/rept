@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #ifdef _WIN32
 # include <windows.h>
@@ -28,7 +29,8 @@ static const char * const usage =
 #ifdef _WIN32
 static void pwinerror(const char *prefix)
 {
-	if (!prefix) prefix = PACKAGE;
+	if (!prefix)
+		prefix = PACKAGE;
 	DWORD error = GetLastError();
 
 	char *message;
@@ -44,7 +46,7 @@ static void pwinerror(const char *prefix)
 
 	if (len) {
 		/* No trailing newline since FormatMessage adds it */
-		fprintf(stderr, "%s: %s", prefix, message);
+		fprintf(stderr, "%s: %lu - %s", prefix, error, message);
 		HeapFree(GetProcessHeap(), 0, message);
 	} else {
 		fprintf(stderr, "%s: error %lu\n", prefix, error);
@@ -69,18 +71,70 @@ static LPSTR get_child_cmdline()
 	bool in_quotes = false;
 	bool skip_next = false;
 	for (; *cmdline && (in_quotes || !isspace(*cmdline)); cmdline++) {
-		if (skip_next) skip_next = false;
-		else if (*cmdline == '\\') skip_next = true;
-		else if (*cmdline == '"') in_quotes = !in_quotes;
+		if (skip_next)
+			skip_next = false;
+		else if (*cmdline == '\\')
+			skip_next = true;
+		else if (*cmdline == '"')
+			in_quotes = !in_quotes;
 	}
-	while (isspace(*cmdline)) cmdline += 1;
+
+	while (isspace(*cmdline))
+		cmdline += 1;
 
 	return cmdline;
 }
 
-/* Returns: 0 success
-           -1 broken pipe
-   Exits on error. */
+static bool pipe_error(DWORD err)
+{
+	switch (err) {
+	case ERROR_NO_DATA:
+	case ERROR_BROKEN_PIPE:
+	case ERROR_PIPE_NOT_CONNECTED:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+/* Copy data from src to dest until EOF or broken pipe. Returns false if other
+   read errors or any write errors occur. */
+static bool drain(HANDLE src, HANDLE dest)
+{
+	char buf[4096];
+	while (true) {
+		DWORD num;
+		if (!ReadFile(src, buf, sizeof(buf), &num, NULL)) {
+			if (pipe_error(GetLastError()))
+				break;
+
+			pwinerror(PACKAGE ": ReadFile failed");
+			exit(EXIT_FAILURE);
+		}
+
+		TCHAR *rest = buf;
+		while (num > 0) {
+			DWORD n;
+			if (!WriteFile(dest, rest, num, &n, NULL)) {
+				if (pipe_error(GetLastError()))
+					return false;
+				else {
+					pwinerror(PACKAGE ": WriteFile "
+						"failed");
+					exit(EXIT_FAILURE);
+				}
+			}
+
+			rest += n;
+			num -= n;
+		}
+	}
+
+	return true;
+}
+
+/* Returns 0 on success, -1 on broken pipe. Exits on error. */
 static int run_child(TCHAR *cmdline)
 {
 	SECURITY_ATTRIBUTES sa = {0};
@@ -132,89 +186,96 @@ static int run_child(TCHAR *cmdline)
 		exit(EXIT_FAILURE);
 	}
 
-	char buf[4096];
-	while (1) {
-		DWORD len;
-		if (!ReadFile(pipe_r, &buf, sizeof(buf), &len, NULL)) {
-			if (GetLastError() == ERROR_BROKEN_PIPE) {
-				/* Input pipe closed so child terminated.
-				   Now we'll need to rerun the command */
-				return 0;
-			}
-
-			pwinerror(PACKAGE ": ReadFile failed");
-			exit(EXIT_FAILURE);
-		}
-
-		TCHAR *rest = buf;
-		do {
-			DWORD nwritten;
-			if (WriteFile(hout, rest, len, &nwritten, NULL)) {
-				len -= nwritten;
-				rest += nwritten;
-				continue;
-			}
-
-			switch (GetLastError()) {
-			case ERROR_BROKEN_PIPE:
-			case ERROR_NO_DATA: /* also happens on broken pipe */
-				/* Output pipe closed, we're done */
-				return 1;
-
-			default:
-				pwinerror(PACKAGE ": WriteFile failed");
-				exit(EXIT_FAILURE);
-			}
-		} while (len > 0);
-	}
+	DWORD drain_err = drain(pipe_r, hout) ? 0 : GetLastError();
 
 	CloseHandle(pi.hProcess);
 	CloseHandle(pipe_r);
+
+	if (drain_err == 0)
+		return 0;
+	else if (pipe_error(drain_err))
+		return -1;
+	else {
+		pwinerror(PACKAGE);
+		exit(EXIT_FAILURE);
+	}
 }
 
 #else /* _WIN32 */
 
-static ssize_t read_retrying(int file, char *buf, size_t num)
+/* Copy data from src to dest until EOF or EPIPE. Returns false if other
+   read errors on any write errors occur. */
+static bool drain(int src, int dest)
 {
-	ssize_t ret;
-	do {
-		ret = read(file, buf, num);
-	} while (ret == -1 && errno == EINTR);
-	return ret;
-}
+	char buf[4096];
+	while (true) {
+		ssize_t num;
+		while ((num = read(src, buf, sizeof(buf))) == -1
+				&& errno == EINTR)
+			;
 
-static ssize_t write_all(int file, const char *buf, size_t num)
-{
-	ssize_t nwritten = 0;
-
-	while (nwritten < num) {
-		ssize_t ret = write(file, buf + nwritten, num - nwritten);
-		if (ret >= 0) {
-			nwritten += ret;
-		} else if (errno != EINTR) {
+		if (num == 0)
 			break;
+		else if (num == -1)
+			return errno == EPIPE;
+
+		char *rest = buf;
+		while (num > 0) {
+			ssize_t n;
+			while ((n = write(dest, rest, num)) == -1
+					&& errno == EINTR)
+				;
+			if (n == -1)
+				return false;
+
+			rest += n;
+			num -= n;
 		}
 	}
 
-	return nwritten;
+	return true;
 }
 
-/* Returns: 0 success
-           -1 broken pipe
-   Exits on error. */
+/* Returns 0 on success, -1 on broken pipe. Exits on error. */
 static int run_child(char **argv)
 {
 	int fds[2];
-	if (pipe(fds) == -1) goto err;
+	if (pipe(fds) == -1) {
+		perror(PACKAGE ": failed to create pipe");
+		exit(EXIT_FAILURE);
+	}
 
 	pid_t pid = fork();
 	if (pid == -1) {
-		goto err;
-	} else if (pid == 0) {
+		perror(PACKAGE ": failed to fork()");
+		exit(EXIT_FAILURE);
+	}
+
+	if (pid) {
+		/* We're in the parent process.	We don't need the write end
+		   of the pipe. */
+		close(fds[1]);
+
+		int drain_err = drain(fds[0], STDOUT_FILENO) ? 0 : false;
+		wait(NULL);
+		close(fds[0]);
+
+		if (drain_err == 0)
+			return 0;
+		else if (drain_err == EPIPE)
+			return -1;
+		else {
+			perror(PACKAGE);
+			exit(EXIT_FAILURE);
+		}
+	} else {
 		/* In the child process. Assign the write end of the
 		   pipe we created to standard output */
 		while (dup2(fds[1], STDOUT_FILENO) == -1) {
-			if (errno != EINTR) goto err;
+			if (errno == EINTR) {
+				perror(PACKAGE ": failed to dup");
+				exit(EXIT_FAILURE);
+			}
 		}
 
 		/* We don't need the pipe handles any more */
@@ -223,45 +284,9 @@ static int run_child(char **argv)
 
 		execvp(argv[0], argv);
 
-		/* execvp has failed if we get here */
-		goto err;
-	}
-
-	/* We're in the parent process.	We don't need the write end
-	   of the pipe. */
-	close(fds[1]);
-
-	bool eof = false;
-	int err = 0;
-
-	char buf[4096];
-	while (!eof && !err) {
-		ssize_t len = read_retrying(fds[0], buf, sizeof(buf));
-		if (len == -1) {
-			err = errno;
-		} else if (len == 0) {
-			/* EOF, child has terminated */
-			eof = true;
-		} else {
-			ssize_t nwritten = write_all(STDOUT_FILENO, buf, len);
-			if (nwritten != len) err = errno;
-		}
-	}
-
-	close(fds[0]);
-	if (pid > 0) wait(NULL);
-
-	if (!err) {
-		return 0;
-	} else if (err == EPIPE) {
-		return 1;
-	} else {
-		printf(PACKAGE ": %s\n", strerror(err));
+		perror(PACKAGE ": failed to start child");
 		exit(EXIT_FAILURE);
 	}
-
-err:	perror(PACKAGE);
-	exit(EXIT_FAILURE);
 }
 #endif /* _WIN32 */
 
