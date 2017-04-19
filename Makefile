@@ -17,7 +17,7 @@ install: rept
 	install rept $(bindir)/rept
 
 uninstall:
-	rm -f $(bindir)/rept
+	$(RM) $(bindir)/rept
 
 clean:
-	rm -f rept
+	$(RM) rept
