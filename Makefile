@@ -1,5 +1,5 @@
 prefix ?= /usr/local
-bindir ?= $(prefx)/bin
+bindir ?= $(prefix)/bin
 
 PACKAGE ?= rept
 VERSION ?= \(git\)
