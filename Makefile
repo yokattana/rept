@@ -15,7 +15,7 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 all: rept Readme.txt
 
 Readme.txt: rept.1
-	$(ROFF) -mdoc -Tutf8 rept.1 | $(COL) -bx > Readme.txt
+	$(ROFF) -mdoc -Tascii rept.1 | $(COL) -bx > Readme.txt
 
 check: rept
 	./rept -v > /dev/null

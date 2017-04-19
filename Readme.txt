@@ -2,7 +2,7 @@
 REPT                                 LOCAL                                REPT
 
 NAME
-     rept — repeat a command
+     rept -- repeat a command
 
 SYNOPSIS
      rept program [argument ...]
@@ -16,21 +16,21 @@ DESCRIPTION
      The Windows version of rept does no argument escaping of any kind; the
      command line following rept is passed to the system verbatim.  This means
      that the command is not executed within a cmd.exe context.  To use cmd
-     built‐ins, invoke cmd as part of the command line as in the example
+     built-ins, invoke cmd as part of the command line as in the example
      below.
 
      Options:
 
-     −h      Print a short help message and exit.
+     -h      Print a short help message and exit.
 
-     −v      Print version and exit.
+     -v      Print version and exit.
 
 EXAMPLES
      The equivalent to the yes command is:
 
            rept echo yes
 
-     On Windows, we need to go though cmd because echo is a built‐in:
+     On Windows, we need to go though cmd because echo is a built-in:
 
            rept cmd /c echo yes
 
