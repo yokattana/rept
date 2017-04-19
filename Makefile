@@ -5,7 +5,8 @@ mandir ?= $(prefix)/share/man/man1
 PACKAGE ?= rept
 VERSION ?= \(git\)
 
-MAN ?= man
+ROFF ?= groff
+COL  ?= col
 
 CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 
@@ -14,7 +15,7 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 all: rept Readme.txt
 
 Readme.txt: rept.1
-	$(MAN) ./rept.1 > Readme.txt
+	$(ROFF) -mdoc -Tutf8 rept.1 | $(COL) -bx > Readme.txt
 
 check: rept
 	./rept -v > /dev/null
