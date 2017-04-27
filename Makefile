@@ -14,7 +14,7 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 all: rept README.txt
 
 README.txt: rept.1
-	groff -mdoc -Tascii rept.1 | col -bx > README.txt
+	man ./rept.1 | col -bx > README.txt
 
 check: rept
 	./rept -v > /dev/null
