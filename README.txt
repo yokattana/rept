@@ -1,8 +1,7 @@
-
 REPT                                 LOCAL                                REPT
 
 NAME
-     rept -- repeat a command
+     rept - repeat a command
 
 SYNOPSIS
      rept program [argument ...]
@@ -42,4 +41,4 @@ EXIT STATUS
 AUTHORS
      iku@yokattana.com
 
-Yokattana                       April 20, 2017                       Yokattana
+Yokattana                       April 27, 2017                       Yokattana
