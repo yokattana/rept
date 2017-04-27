@@ -36,8 +36,8 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 
 .PHONY: all dist check install uninstall clean distclean
 
-all:  rept
-dist: all README.txt
+all: rept
+doc: README.txt
 
 README.txt: rept.1
 	man ./rept.1 | col -bx > README.txt
