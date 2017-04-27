@@ -34,9 +34,10 @@ RM ?= rm -f
 
 CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 
-.PHONY: all check install uninstall clean distclean
+.PHONY: all dist check install uninstall clean distclean
 
-all: rept README.txt
+all:  rept
+dist: all README.txt
 
 README.txt: rept.1
 	man ./rept.1 | col -bx > README.txt
