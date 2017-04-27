@@ -9,10 +9,10 @@ CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 
 .PHONY: all check install uninstall clean distclean
 
-all: rept Readme.txt
+all: rept README.txt
 
-Readme.txt: rept.1
-	groff -mdoc -Tascii rept.1 | col -bx > Readme.txt
+README.txt: rept.1
+	groff -mdoc -Tascii rept.1 | col -bx > README.txt
 
 check: rept
 	./rept -v > /dev/null
@@ -28,4 +28,4 @@ clean:
 	$(RM) rept
 
 distclean: clean
-	$(RM) Readme.txt
+	$(RM) README.txt
