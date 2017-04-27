@@ -5,6 +5,8 @@ mandir ?= $(prefix)/share/man/man1
 PACKAGE ?= rept
 VERSION ?= \(git\)
 
+RM ?= rm -f
+
 CFLAGS += -std=c99 -Wall -DPACKAGE=\"$(PACKAGE)\" -DVERSION=\"$(VERSION)\"
 
 .PHONY: all check install uninstall clean distclean
